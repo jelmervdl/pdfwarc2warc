@@ -140,6 +140,14 @@ def process(options, in_queue, out_queue):
 					config={},
 					adjust_cleaner_config=[])
 
+				# Common error: empty document
+				if len(input_json.get('pages', [])) == 0:
+					continue
+
+				# Common error: document without text
+				if len(input_json.get('fonts', [])) == 0:
+					continue
+
 				export = Export(input_json,
 					seperate_header_footer=True,
 					footnotes_last=True,
