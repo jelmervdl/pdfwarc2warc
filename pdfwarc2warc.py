@@ -189,12 +189,13 @@ def write(options, stats, queue):
 		
 
 def main(argv):
-	parser = argparse.ArgumentParser()
-	parser.add_argument('warcs', nargs='+', type=argparse.FileType('rb'))
-	parser.add_argument('--dump-errors', type=str)
-	parser.add_argument('--fast', action='store_true')
-	parser.add_argument('--parsr-location', type=str, default='localhost:3001')
-	parser.add_argument('--timeout', type=int, default=300)
+	parser = argparse.ArgumentParser(description='Converts a warc with pdfs into a warc with the contents of these pdfs.')
+	parser.add_argument('warcs', nargs='+', type=argparse.FileType('rb'), help='one or more warcs with pdfs')
+	parser.add_argument('--threads', '-j', type=int, default=8, help='number of workers (default: 8)')
+	parser.add_argument('--dump-errors', type=str, help='dump pdfs causing errors into this directory')
+	parser.add_argument('--fast', action='store_true', help='skip certain steps in parsr')
+	parser.add_argument('--parsr-location', type=str, default='localhost:3001', help='host:port of Parsr api (default: localhost:3001)')
+	parser.add_argument('--timeout', type=int, default=300, help='time limit in seconds for processing per pdf (default 300)')
 	parser.add_argument('--output', '-o', type=argparse.FileType('wb'), default=sys.stdout.buffer)
 	
 	options = parser.parse_args(argv[1:])
@@ -206,7 +207,7 @@ def main(argv):
 	writer = threading.Thread(target=write, args=(options, stats, out_queue))
 	writer.start()
 
-	workers = [threading.Thread(target=process, args=(options, in_queue, out_queue)) for worker in range(8)]
+	workers = [threading.Thread(target=process, args=(options, in_queue, out_queue)) for worker in range(options.threads)]
 	# For the duration of workers doing things, redirect stdout to stderr because
 	# of pd3f_extract. Would like to do this inside the worker itself, but python
 	# and threading ... redirect would not be thread local!
