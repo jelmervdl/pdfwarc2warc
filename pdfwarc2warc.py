@@ -194,7 +194,7 @@ def main(argv):
 	parser.add_argument('--dump-errors', type=str)
 	parser.add_argument('--fast', action='store_true')
 	parser.add_argument('--parsr-location', type=str, default='localhost:3001')
-	parser.add_argument('--timeout', type=int, default=60)
+	parser.add_argument('--timeout', type=int, default=300)
 	parser.add_argument('--output', '-o', type=argparse.FileType('wb'), default=sys.stdout.buffer)
 	
 	options = parser.parse_args(argv[1:])
