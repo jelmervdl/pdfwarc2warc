@@ -108,6 +108,9 @@ class ParsrFilter:
 				written += self.fh.write(line + '\n')
 		return written
 
+	def flush(self):
+		self.fh.flush()
+
 
 
 def read(options, stats, queue):
