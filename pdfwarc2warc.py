@@ -180,6 +180,9 @@ def process(options, in_queue, out_queue):
 					with open(f'{basename}.json', 'w') as fh:
 						json.dump(input_json, fh, indent=2)
 
+			if options.pedantic:
+				sys.exit(1)
+
 
 def write(options, stats, queue):
 	writer = WARCWriter(options.output, gzip=True)
@@ -196,6 +199,7 @@ def main(argv):
 	parser.add_argument('warcs', nargs='+', type=argparse.FileType('rb'), help='one or more warcs with pdfs')
 	parser.add_argument('--threads', '-j', type=int, default=8, help='number of workers (default: 8)')
 	parser.add_argument('--dump-errors', type=str, help='dump pdfs causing errors into this directory')
+	parser.add_argument('--pedantic', action='store_true', help='stop at the first sign of trouble')
 	parser.add_argument('--fast', action='store_true', help='skip certain steps in parsr')
 	parser.add_argument('--parsr-location', type=str, default='localhost:3001', help='host:port of Parsr api (default: localhost:3001)')
 	parser.add_argument('--timeout', type=int, default=300, help='time limit in seconds for processing per pdf (default 300)')
