@@ -181,7 +181,8 @@ def process(options, in_queue, out_queue):
 						json.dump(input_json, fh, indent=2)
 
 			if options.pedantic:
-				sys.exit(1)
+				sys.stderr.flush()
+				os._exit(1) # TODO Rather aggressive, but I don't have a better alternative right now
 
 
 def write(options, stats, queue):
