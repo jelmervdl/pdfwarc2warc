@@ -128,6 +128,8 @@ def process(options, in_queue, out_queue):
 		if task is None:
 			break
 
+		input_json = None # reset it so it does show the previous json when run_parsr errors out
+
 		try:
 			with Timeout(options.timeout):
 				# Oh crap extract calls parsr_client which pollutes stdout (not stderr!)
