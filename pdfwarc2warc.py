@@ -167,6 +167,10 @@ def process(options, in_queue, out_queue):
 
 			task.record.raw_stream = BytesIO(text.encode())
 			task.record.length = None # Reset to recalculate
+			
+			# Reset content type header to inform warc2text
+			task.record.http_headers.replace_header('Content-Type', 'text/plain')
+			
 			out_queue.put(task.record)
 		except Exception as e:
 			print(f"Error while processing record {task.record.rec_headers.get_header('WARC-Record-ID')} ({task.record.rec_headers.get_header('WARC-Target-URI')}):", file=sys.stderr)
