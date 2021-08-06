@@ -160,8 +160,13 @@ def process(options, in_queue, out_queue):
 				lang='multi',
 				fast=options.fast)
 
-			task.record.raw_stream = BytesIO(export.text().encode())
-			task.record.length = None
+			# For some reason parsr generates @TAB@ characters, but nothing happens
+			# to them. Replacing it with a space for now since we remove \t later in
+			# the pipeline anyway (don't we?!)
+			text = export.text().replace('@TAB@', ' ')
+
+			task.record.raw_stream = BytesIO(text.encode())
+			task.record.length = None # Reset to recalculate
 			out_queue.put(task.record)
 		except Exception as e:
 			print(f"Error while processing record {task.record.rec_headers.get_header('WARC-Record-ID')} ({task.record.rec_headers.get_header('WARC-Target-URI')}):", file=sys.stderr)
