@@ -25,6 +25,9 @@ CRITICAL_EXCEPTIONS = (
 
 
 def current_thread_id():
+	"""Returns the internal thread id which we need when we want to mess with the
+	thread state (the exception state specifically) through python internals.
+	"""
 	current_thread = threading.current_thread()
 
 	if hasattr(current_thread, '_thread_id'):
@@ -84,6 +87,12 @@ class Timeout:
 
 
 class Task:
+	"""Wraps a warcio record to make the the pdf (or the warc payload) accessible
+	through the filesystem as a temporary file, because parsr_client (which we
+	interact with through run_parsr) expects real files on the filesystem. We deal
+	with all of that here so that in case of an exception in process(), we still
+	have access to the tempfile to dump in case of --dump-errors.
+	"""
 	def __init__(self, record):
 		self.record = record
 		self.tempfile = NamedTemporaryFile().__enter__()
@@ -103,6 +112,9 @@ class Stats:
 
 
 class ParsrFilter:
+	"""Stupid sys.stdout filter that ignores lines produced by run_parsr (and
+	the parsr_client which we can't just edit.)
+	"""
 	def __init__(self, fh):
 		self.fh = fh
 
@@ -121,6 +133,11 @@ class ParsrFilter:
 
 
 def read(options, stats, queue):
+	"""Read warcio records from a warc and puts then into the queue as a Task
+	object. Effectively, this copies a warc record into a tempfile which is then
+	put into the queue, including the original record for metadata. Also updates
+	stats.read on the go.
+	"""
 	for fh in options.warcs:
 		for n, record in enumerate(ArchiveIterator(fh)):
 			if record.rec_type != 'response' and record.rec_type != 'resource':
@@ -130,6 +147,12 @@ def read(options, stats, queue):
 
 
 def process(options, in_queue, out_queue):
+	"""Takes warcio records (wrapped as Task objects) from the in_queue, uploads
+	the pdf from it to parsr (assuming it is a pdf otherwise parsr will tell us
+	with an exception) and then try to get text out of parsr's output. That is
+	then put into the warc record, and the new record is placed on the out_queue.
+	Stops when it encounters a None in in_queue.
+	"""
 	while True:
 		task = in_queue.get()
 		if task is None:
@@ -152,14 +175,17 @@ def process(options, in_queue, out_queue):
 					config={},
 					adjust_cleaner_config=[])
 
-			# Common error: empty document
+			# Common error: empty document. That's okay.
 			if len(input_json.get('pages', [])) == 0:
 				continue
 
-			# Common error: document without text
+			# Common error: document without text. That's also okay.
 			if len(input_json.get('fonts', [])) == 0:
 				continue
 
+			# Go from input_json contains layout info to plain text, with lines that
+			# were wrapped in the pdf back into a single line, and all the surrounding
+			# layout text removed.
 			export = Export(input_json,
 				seperate_header_footer=True,
 				footnotes_last=True,
@@ -173,9 +199,10 @@ def process(options, in_queue, out_queue):
 			text = export.text().replace('@TAB@', ' ')
 
 			task.record.raw_stream = BytesIO(text.encode())
-			task.record.length = None # Reset to recalculate
+			task.record.length = None # Reset to let warcio recalculate it on demand
 			
-			# Reset content type header to inform warc2text
+			# Reset content type header to inform warc2text that it should now treat
+			# this pdf url as plain text.
 			task.record.http_headers.replace_header('Content-Type', 'text/plain')
 			
 			out_queue.put(task.record)
@@ -183,6 +210,8 @@ def process(options, in_queue, out_queue):
 			print(f"Error while processing record {task.record.rec_headers.get_header('WARC-Record-ID')} ({task.record.rec_headers.get_header('WARC-Target-URI')}):", file=sys.stderr)
 			traceback.print_exc(file=sys.stderr)
 			
+			# If we're in debug mode, try to dump out as much info as we have about this
+			# record and what went wrong.
 			if options.dump_errors:
 				basename = os.path.join(options.dump_errors, task.record.rec_headers.get_header('WARC-Record-ID'))
 
@@ -199,12 +228,20 @@ def process(options, in_queue, out_queue):
 						json.dump(input_json, fh, indent=2)
 
 			# If this was a known trouble error (as in we know it is unrecoverable and will mess with all
+			# of the following pdfs as well) or if we're just very careful, break *hard*.
 			if isinstance(e, CRITICAL_EXCEPTIONS) or options.pedantic:
 				sys.stderr.flush()
 				os.abort() # TODO Rather aggressive, but I don't have a better alternative right now
 
+			# In all other cases: shrug, bad luck! Either it was just buggy pdf, or a very large one, or
+			# it ran into some error inside pd3f which we don't care fixing. On to the next pdf.
+
 
 def write(options, stats, queue):
+	"""Writes warc records (now with text instead of pdf) back to a warc file.
+	Stops when it encounters a None in the queue. Again, updates stats (so make
+	sure there's only one writer thread?)
+	"""
 	writer = WARCWriter(options.output, gzip=True)
 	while True:
 		record = queue.get()
@@ -228,8 +265,8 @@ def main(argv):
 	options = parser.parse_args(argv[1:])
 	stats = Stats()
 	
-	in_queue = SimpleQueue()
-	out_queue = SimpleQueue()
+	in_queue = SimpleQueue() # read() -> process()
+	out_queue = SimpleQueue() # process() -> write()
 
 	writer = threading.Thread(target=write, args=(options, stats, out_queue))
 	writer.start()
