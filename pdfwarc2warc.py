@@ -15,6 +15,13 @@ from io import BytesIO
 from contextlib import contextmanager, redirect_stdout
 from pd3f.export import run_parsr, Export
 from queue import SimpleQueue
+from requests.exceptions import ConnectionError
+
+
+CRITICAL_EXCEPTIONS = (
+	ConnectionError, # Thrown if send_document cannot connect to parsr instance
+	OSError, # Thrown if there are too many files open
+)
 
 
 def current_thread_id():
@@ -191,9 +198,10 @@ def process(options, in_queue, out_queue):
 					with open(f'{basename}.json', 'w') as fh:
 						json.dump(input_json, fh, indent=2)
 
-			if options.pedantic:
+			# If this was a known trouble error (as in we know it is unrecoverable and will mess with all
+			if isinstance(e, CRITICAL_EXCEPTIONS) or options.pedantic:
 				sys.stderr.flush()
-				os._exit(1) # TODO Rather aggressive, but I don't have a better alternative right now
+				os.abort() # TODO Rather aggressive, but I don't have a better alternative right now
 
 
 def write(options, stats, queue):
