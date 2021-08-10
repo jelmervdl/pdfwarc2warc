@@ -14,7 +14,7 @@ from tempfile import NamedTemporaryFile
 from io import BytesIO
 from contextlib import contextmanager, redirect_stdout
 from pd3f.export import run_parsr, Export
-from queue import SimpleQueue
+from queue import Queue
 from requests.exceptions import ConnectionError
 
 
@@ -265,8 +265,8 @@ def main(argv):
 	options = parser.parse_args(argv[1:])
 	stats = Stats()
 	
-	in_queue = SimpleQueue() # read() -> process()
-	out_queue = SimpleQueue() # process() -> write()
+	in_queue = Queue(maxsize=1000) # read() -> process()
+	out_queue = Queue() # process() -> write()
 
 	writer = threading.Thread(target=write, args=(options, stats, out_queue))
 	writer.start()
