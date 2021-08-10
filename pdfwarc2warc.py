@@ -266,10 +266,12 @@ def main(argv):
 	in_queue = Queue(maxsize=1000) # read() -> process()
 	out_queue = Queue() # process() -> write()
 
-	writer = threading.Thread(target=write, args=(options, stats, out_queue))
+	# Note: opening writer and workers with daemon=True because we'll control whether
+	# we exit or not from here explicitly.
+	writer = threading.Thread(target=write, args=(options, stats, out_queue), daemon=True)
 	writer.start()
 
-	workers = [threading.Thread(target=process, args=(options, in_queue, out_queue)) for worker in range(options.threads)]
+	workers = [threading.Thread(target=process, args=(options, in_queue, out_queue), daemon=True) for worker in range(options.threads)]
 	# For the duration of workers doing things, redirect stdout to stderr because
 	# of pd3f_extract. Would like to do this inside the worker itself, but python
 	# and threading ... redirect would not be thread local!
