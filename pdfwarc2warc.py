@@ -88,19 +88,14 @@ class Timeout:
 
 class Task:
 	"""Wraps a warcio record to make the the pdf (or the warc payload) accessible
-	through the filesystem as a temporary file, because parsr_client (which we
-	interact with through run_parsr) expects real files on the filesystem. We deal
-	with all of that here so that in case of an exception in process(), we still
-	have access to the tempfile to dump in case of --dump-errors.
+	through a buffer, since the content stream will otherwise no longer be
+	accessible once process() gets around to it.
 	"""
 	def __init__(self, record):
 		self.record = record
-		self.tempfile = NamedTemporaryFile().__enter__()
-		copyfileobj(record.content_stream(), self.tempfile)
-		self.tempfile.flush()
-
-	def __del__(self):
-		self.tempfile.__exit__(None, None, None)
+		self.buffer = BytesIO()
+		copyfileobj(record.content_stream(), self.buffer)
+		self.buffer.seek(0)
 
 
 class Stats:
@@ -131,18 +126,18 @@ class ParsrFilter:
 		self.fh.flush()
 
 
-
 def read(options, stats, queue):
 	"""Read warcio records from a warc and puts then into the queue as a Task
-	object. Effectively, this copies a warc record into a tempfile which is then
-	put into the queue, including the original record for metadata. Also updates
-	stats.read on the go.
+	object. Also updates stats.read on the go.
 	"""
 	for fh in options.warcs:
 		for n, record in enumerate(ArchiveIterator(fh)):
 			if record.rec_type != 'response' and record.rec_type != 'resource':
 				continue
-			queue.put(Task(record))
+
+			task = Task(record)
+
+			queue.put(task)
 			stats.read += 1
 
 
@@ -167,13 +162,17 @@ def process(options, in_queue, out_queue):
 				# See https://github.com/axa-group/Parsr/blob/develop/clients/python-client/parsr_client/parsr_client.py#L138
 				# Also, why do they call parsr.send_document with silent=False :(
 				# Here: https://github.com/jelmervdl/pd3f-core/blob/master/pd3f/parsr_wrapper.py#L80
-				input_json, _ = run_parsr(
-					task.tempfile.name,
-					check_tables=False,
-					parsr_location=options.parsr_location,
-					fast=options.fast,
-					config={},
-					adjust_cleaner_config=[])
+				with NamedTemporaryFile() as tempfile:
+					copyfileobj(task.buffer, tempfile)
+					tempfile.flush()
+
+					input_json, _ = run_parsr(
+						tempfile.name,
+						check_tables=False,
+						parsr_location=options.parsr_location,
+						fast=options.fast,
+						config={},
+						adjust_cleaner_config=[])
 
 			# Common error: empty document. That's okay.
 			if len(input_json.get('pages', [])) == 0:
@@ -215,9 +214,8 @@ def process(options, in_queue, out_queue):
 			if options.dump_errors:
 				basename = os.path.join(options.dump_errors, task.record.rec_headers.get_header('WARC-Record-ID'))
 
-				with open(f'{basename}.pdf', 'wb') as fh:
-					task.tempfile.seek(0)
-					copyfileobj(task.tempfile, fh)
+				with open(task.tempfile, 'rb') as fh_src, open(f'{basename}.pdf', 'wb') as fh_dst:
+					copyfileobj(fh_src, fh_dst)
 
 				with open(f'{basename}.log', 'w') as fh:
 					print(f"Error while processing record {task.record.rec_headers.get_header('WARC-Record-ID')} ({task.record.rec_headers.get_header('WARC-Target-URI')}):", file=fh)
