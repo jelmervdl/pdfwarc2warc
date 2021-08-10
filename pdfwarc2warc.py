@@ -136,6 +136,12 @@ def read(options, stats, queue):
 				continue
 
 			task = Task(record)
+			
+			# Very quick check on mime magic here to prevent obvious trash reaching
+			# the workers or parsr at all.
+			if task.buffer.getbuffer()[0:4] != b"%PDF":
+				print("Expected %PDF magic, got {!r} instead".format(bytes(task.buffer.getbuffer()[0:4])), file=sys.stderr)
+				continue
 
 			queue.put(task)
 			stats.read += 1
