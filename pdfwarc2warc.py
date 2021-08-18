@@ -14,6 +14,7 @@ from tempfile import NamedTemporaryFile
 from io import BytesIO
 from contextlib import contextmanager, redirect_stdout
 from pd3f.export import run_parsr, Export
+from dehyphen import FlairScorer
 from queue import Queue
 from requests.exceptions import ConnectionError
 
@@ -154,6 +155,11 @@ def process(options, in_queue, out_queue):
 	then put into the warc record, and the new record is placed on the out_queue.
 	Stops when it encounters a None in in_queue.
 	"""
+
+	# One Flair scorer per thread plz. You can control where models are stored
+	# through FLAIR_CACHE_ROOT environment variable.
+	scorer = FlairScorer(lang='multi', fast=False) # There's no fast model for multi :(
+
 	while True:
 		task = in_queue.get()
 		if task is None:
@@ -196,7 +202,8 @@ def process(options, in_queue, out_queue):
 				footnotes_last=True,
 				remove_page_number=True,
 				lang='multi',
-				fast=options.fast)
+				fast=options.fast,
+				scorer=scorer)
 
 			# For some reason parsr generates @TAB@ characters, but nothing happens
 			# to them. Replacing it with a space for now since we remove \t later in
