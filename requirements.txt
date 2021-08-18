@@ -1,2 +1,2 @@
-pd3f @ git+https://github.com/jelmervdl/pd3f-core.git@0eba6e79f9a0d9321291074b5026ab348f89f427
+pd3f @ git+https://github.com/jelmervdl/pd3f-core.git@216a1ac6749c7b291013c8f22a9525689e827140
 warcio==1.7.4
